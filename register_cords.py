@@ -125,6 +125,7 @@ def count_rows(filename):
         return 0
     with open(filename, "r") as f:
         return sum(1 for _ in f)
+    return None
 
 
 if __name__ == "__main__":
