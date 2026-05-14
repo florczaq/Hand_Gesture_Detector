@@ -11,10 +11,17 @@ from torch.utils.data import DataLoader, Dataset
 
 
 def load_samples(folder_path):
+    """Load `(coords, label)` samples from all CSV files in a folder.
+
+    Malformed rows, rows without labels, and rows that do not contain exactly
+    63 numeric coordinate values are skipped silently.
+    """
+
     samples = []
     for csv_path in sorted(glob.glob(os.path.join(folder_path, "*.csv"))):
         with open(csv_path, "r", encoding="utf-8") as f:
             for row in csv.reader(f):
+                # Ignore incomplete rows so partially written files do not fail training.
                 if len(row) < 2:
                     continue
                 label = row[-1].strip()
@@ -30,19 +37,31 @@ def load_samples(folder_path):
 
 
 class GestureCSVDataset(Dataset):
+    """PyTorch dataset wrapper for labeled gesture landmark samples."""
+
     def __init__(self, samples, label_to_idx):
+        """Keep only samples whose labels are present in the provided mapping."""
+
         self.samples = [(x, label_to_idx[y]) for x, y in samples if y in label_to_idx]
 
     def __len__(self):
+        """Return the number of usable training samples."""
+
         return len(self.samples)
 
     def __getitem__(self, idx):
+        """Return one sample as float features and a long integer class id."""
+
         x, y = self.samples[idx]
         return torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.long)
 
 
 class GestureMLP(nn.Module):
+    """Simple fully connected classifier for 63-value hand landmark vectors."""
+
     def __init__(self, num_classes):
+        """Build a small multi-layer perceptron with ReLU activations."""
+
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(63, 128),
@@ -55,10 +74,14 @@ class GestureMLP(nn.Module):
         )
 
     def forward(self, x):
+        """Run a forward pass and return unnormalized class logits."""
+
         return self.net(x)
 
 
 def train(model, loader, epochs=40, lr=0.0008):
+    """Train the model in place and print loss progress for each epoch."""
+
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
@@ -74,6 +97,13 @@ def train(model, loader, epochs=40, lr=0.0008):
 
 
 def build_distance_rejection(train_samples, label_to_idx, percentile=90.0, scale=1.0):
+    """Compute per-class centroids and distance thresholds for rejection.
+
+    Each threshold is derived from the chosen distance percentile and then
+    scaled so runtime prediction can reject samples that are too far from the
+    training distribution of the predicted class.
+    """
+
     by_label = {label: [] for label in label_to_idx}
     for coords, label in train_samples:
         if label in by_label:
@@ -94,6 +124,12 @@ def build_distance_rejection(train_samples, label_to_idx, percentile=90.0, scale
 
 def detect_gesture(model, coords_63, idx_to_label, centroids, dist_thresholds,
                    min_confidence=0.9, min_margin=0.3):
+    """Predict a gesture label or return `"N/A"` when checks fail.
+
+    A prediction is accepted only if the top class clears the confidence,
+    confidence-margin, and centroid-distance thresholds.
+    """
+
     x = torch.tensor(coords_63, dtype=torch.float32).unsqueeze(0)
     with torch.no_grad():
         probs = torch.softmax(model(x), dim=1)
@@ -107,6 +143,7 @@ def detect_gesture(model, coords_63, idx_to_label, centroids, dist_thresholds,
 
     centroid = centroids[pred_label]
     dist = float(np.linalg.norm(np.asarray(coords_63, dtype=np.float32) - centroid))
+    # Fall back to the null label when the sample is uncertain or too far away.
     if conf >= min_confidence and margin >= min_margin and dist <= dist_thresholds[pred_label]:
         return pred_label, conf, margin, dist
     return "N/A", conf, margin, dist
@@ -114,6 +151,8 @@ def detect_gesture(model, coords_63, idx_to_label, centroids, dist_thresholds,
 
 def test_and_print(model, test_samples, idx_to_label, centroids, dist_thresholds,
                    min_confidence=0.9, min_margin=0.3):
+    """Run inference on test samples and print a compact per-sample report."""
+
     if not test_samples:
         print("No test samples found.")
         return
@@ -136,6 +175,8 @@ def test_and_print(model, test_samples, idx_to_label, centroids, dist_thresholds
 
 def save_model_config(config_path, classes, min_confidence, min_margin,
                       dist_thresholds, dist_percentile, dist_scale):
+    """Persist runtime settings needed by the live detector."""
+
     config = {
         "input_size": 63,
         "classes": classes,
@@ -152,6 +193,8 @@ def save_model_config(config_path, classes, min_confidence, min_margin,
 
 
 if __name__ == "__main__":
+    """Train the classifier from `data/`, then save artifacts under `models/`."""
+
     train_folder = "data/train"
     test_folder = "data/test"
     model_path = os.path.join("models", "gesture_mlp.pth")
@@ -167,6 +210,7 @@ if __name__ == "__main__":
     if not train_samples:
         raise ValueError(f"No training samples found in {train_folder}")
 
+    # The classifier is intended for multiple gestures plus the implicit N/A case.
     classes = sorted({label for _, label in train_samples})
     if len(classes) < 2:
         raise ValueError("Need at least 2 gesture classes in training data.")
@@ -178,6 +222,7 @@ if __name__ == "__main__":
     model = GestureMLP(num_classes=len(classes))
     train(model, loader)
 
+    # Store class centroids and thresholds so runtime detection can reject outliers.
     centroids, dist_thresholds = build_distance_rejection(
         train_samples,
         label_to_idx,

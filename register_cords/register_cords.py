@@ -17,6 +17,8 @@ FINGER_COLORS = {
 
 
 def setup_camera_window():
+    """Create the capture window and return a handle to the default camera."""
+
     cv2.namedWindow('frame', cv2.WINDOW_AUTOSIZE)
     cv2.setWindowProperty(
         "frame",
@@ -27,6 +29,13 @@ def setup_camera_window():
 
 
 def get_flat_landmarks(hand):
+    """Return 21 hand landmarks flattened into a wrist-relative 63-value vector.
+
+    Coordinates are normalized by the distance between the index MCP and pinky
+    MCP joints so collected samples are less sensitive to hand size and camera
+    distance.
+    """
+
     landmarks_flat = []
 
     wrist = hand.landmark[0]
@@ -35,6 +44,7 @@ def get_flat_landmarks(hand):
     index_mcp = hand.landmark[5]
     pinky_mcp = hand.landmark[17]
 
+    # Use palm width as a simple scale reference shared across capture/detect.
     scale = math.sqrt(
         (index_mcp.x - pinky_mcp.x) ** 2 +
         (index_mcp.y - pinky_mcp.y) ** 2 +
@@ -53,6 +63,8 @@ def get_flat_landmarks(hand):
 
 
 def draw_hand_landmarks(frame, hand, w, h, mp_draw, mp_hands):
+    """Draw colored points, landmark indices, and MediaPipe hand connections."""
+
     for idx, lm in enumerate(hand.landmark):
         x = int(lm.x * w)
         y = int(lm.y * h)
@@ -87,6 +99,12 @@ def draw_hand_landmarks(frame, hand, w, h, mp_draw, mp_hands):
 
 
 def maybe_save_sample(k, landmarks_flat, sample_count):
+    """Append one labeled sample to the CSV file when `s` is pressed.
+
+    A sample is saved only when a full 63-value landmark vector is available.
+    The CSV file is written relative to the current working directory.
+    """
+
     if k == 115 and len(landmarks_flat) == 63:  # S and hand visible
         sample_count += 1
         print(f"Save number #{sample_count}: {GESTURE_LABEL}")
@@ -100,11 +118,14 @@ def maybe_save_sample(k, landmarks_flat, sample_count):
 
 
 def main():
+    """Run the sample-capture loop until ESC or the window is closed."""
+
     mp_hands = mp.solutions.hands
     mp_draw = mp.solutions.drawing_utils
 
     cap = setup_camera_window()
 
+    # Continue numbering from the existing CSV so capture sessions can resume.
     sample_count = count_rows(FILE_NAME)
 
     with mp_hands.Hands(
@@ -142,11 +163,12 @@ def main():
 
 
 def count_rows(filename):
+    """Return the number of existing samples in a CSV file, or zero if missing."""
+
     if not os.path.exists(filename):
         return 0
     with open(filename, "r") as f:
         return sum(1 for _ in f)
-    return None
 
 
 if __name__ == "__main__":
