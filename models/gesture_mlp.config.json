@@ -1,0 +1,24 @@
+{
+  "input_size": 63,
+  "classes": [
+    "thumbs_down",
+    "thumbs_up",
+    "thumps_down"
+  ],
+  "null_label": "N/A",
+  "min_confidence": 0.9,
+  "min_margin": 0.35,
+  "distance_thresholds": {
+    "thumbs_down": 4.438554810119629,
+    "thumbs_up": 4.327219055725098,
+    "thumps_down": 5.460423515869141
+  },
+  "distance_percentile": 95.0,
+  "distance_scale": 1.0,
+  "architecture": [
+    63,
+    128,
+    64,
+    32
+  ]
+}
