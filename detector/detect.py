@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from dataclasses import dataclass
 
 import cv2
@@ -8,6 +9,9 @@ import torch
 
 from learn_model.learn import GestureMLP, build_distance_rejection, detect_gesture, load_samples
 from register_cords.register_cords import get_flat_landmarks
+
+
+COOLDOWN_SECONDS = 1.5
 
 
 @dataclass(frozen=True)
@@ -167,33 +171,35 @@ def detect_frame_gesture(frame, hands, runtime, mp_draw, mp_hands, min_confidenc
     return frame, prediction
 
 
-def update_printed_gesture(last_printed_gesture, prediction):
-    """Print newly recognized gestures and reset state when nothing is accepted."""
+def update_printed_gesture(last_printed_status, last_printed_at, prediction, now):
+    """Print status changes, including ``N/A``, while respecting a minimum cooldown."""
 
-    if prediction.gesture == "N/A":
-        return None
+    current_status = prediction.gesture
 
-    if prediction.gesture != last_printed_gesture:
+    if current_status == last_printed_status:
+        return last_printed_status, last_printed_at
+
+    if (now - last_printed_at) >= COOLDOWN_SECONDS:
         print(
-            f"Gesture: {prediction.gesture} "
+            f"Gesture: {current_status} "
             f"(conf={prediction.conf * 100:.2f}% margin={prediction.margin:.3f} "
             f"dist={prediction.dist:.3f})"
         )
-        return prediction.gesture
+        return current_status, now
 
-    return last_printed_gesture
+    return last_printed_status, last_printed_at
 
 
-def draw_prediction_overlay(frame, prediction):
-    """Render the current gesture status on top of the video frame."""
+def draw_prediction_overlay(frame, status):
+    """Render the last accepted status on top of the video frame."""
 
     cv2.putText(
         frame,
-        f"Gesture: {prediction.gesture}",
+        f"Gesture: {status}",
         (10, 30),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.8,
-        (0, 255, 0) if prediction.gesture != "N/A" else (0, 0, 255),
+        (0, 255, 0) if status != "N/A" else (0, 0, 255),
         2,
         cv2.LINE_AA,
     )
@@ -214,7 +220,8 @@ def run_detection_loop(cap, runtime):
     min_confidence, min_margin = read_runtime_thresholds(runtime.config)
     mp_hands = mp.solutions.hands
     mp_draw = mp.solutions.drawing_utils
-    last_printed_gesture = None
+    last_printed_status = None
+    last_printed_at = 0.0
 
     with mp_hands.Hands(
             max_num_hands=1,
@@ -235,9 +242,15 @@ def run_detection_loop(cap, runtime):
                 min_confidence,
                 min_margin,
             )
-            last_printed_gesture = update_printed_gesture(last_printed_gesture, prediction)
+            now = time.monotonic()
+            last_printed_status, last_printed_at = update_printed_gesture(
+                last_printed_status,
+                last_printed_at,
+                prediction,
+                now,
+            )
 
-            draw_prediction_overlay(frame, prediction)
+            draw_prediction_overlay(frame, last_printed_status or "N/A")
             cv2.imshow(window_name, frame)
 
             key = cv2.waitKey(1) & 0xFF
