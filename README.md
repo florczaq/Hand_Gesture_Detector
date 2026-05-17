@@ -13,7 +13,17 @@ This project collects hand landmark data, trains a small neural network, and use
 
 ## Requirements
 
-The project uses Python and the packages listed in each module's `requirements.txt` file. The detector also needs a working camera and a display environment.
+The project uses Python 3.11.
+
+Pinned package versions:
+
+- `numpy==1.26.4`
+- `torch==2.3.1+cpu`
+- `mediapipe==0.10.14`
+- `opencv-python==4.10.0.84`
+- `protobuf==4.25.3`
+
+The detector also needs a working camera and a display environment.
 
 ## Collect data
 
