@@ -1,6 +1,7 @@
 {
   "input_size": 63,
   "classes": [
+    "fist",
     "thumbs_down",
     "thumbs_up"
   ],
@@ -8,6 +9,7 @@
   "min_confidence": 0.95,
   "min_margin": 0.35,
   "distance_thresholds": {
+    "fist": 5.348679922653198,
     "thumbs_down": 4.661928440643311,
     "thumbs_up": 3.9120002618560794
   },

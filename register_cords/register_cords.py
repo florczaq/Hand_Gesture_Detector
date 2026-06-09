@@ -4,7 +4,7 @@ import os
 import cv2
 import mediapipe as mp
 
-GESTURE_LABEL = "test"
+GESTURE_LABEL = "fist"
 FILE_NAME = f"{GESTURE_LABEL}.csv"
 FINGER_COLORS = {
     0: (255, 255, 255),  # wrist - white
